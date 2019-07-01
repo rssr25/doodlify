@@ -15,6 +15,7 @@
 <body>
 
   <script class="jsbin" src="https://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
+  
 <div class="file-upload">
 
   <button class="file-upload-btn" type="button" onclick="$('.file-upload-input').trigger( 'click' )">Add Image</button>
@@ -26,7 +27,7 @@
     </div>
   </div>
   <div class="file-upload-content">
-    <img class="file-upload-image" src="#" alt="your image" />
+    <img class="file-upload-image" src="#" alt="your image" name = "contentImage" />
     <div class="image-title-wrap">
       <button type="button" onclick="removeUpload()" class="remove-image">Remove <span class="image-title">Uploaded Image</span></button>
     </div>
@@ -40,15 +41,15 @@
     </div>
     <div class="row">
       <div class="column">
-        <img id="image1" src="{% static 'images/art.jpg' %}" alt="style image 1" style="width:100%" class="image" onclick="imageOnClick(event)">
+        <img id="image1" name="styleImage1" src="{% static 'images/art.jpg' %}" alt="style image 1" style="width:100%" class="image" onclick="imageOnClick(event)">
       </div>
       
       <div class="column">
-        <img id="image2" src="{% static 'images/art2.png' %}" alt="style image 2" style="width:100%" class="image" onclick="imageOnClick(event)">
+        <img id="image2" name="styleImage2" src="{% static 'images/art2.png' %}" alt="style image 2" style="width:100%" class="image" onclick="imageOnClick(event)">
       </div>
 
       <div class="column">
-        <img id="image3" src="{% static 'images/art3.jpg' %}" alt="style image 3" style="width:100%" class="image" onclick="imageOnClick(event)">
+        <img id="image3" name="styleImage3" src="{% static 'images/art3.jpg' %}" alt="style image 3" style="width:100%" class="image" onclick="imageOnClick(event)">
       </div>
 
     </div> 
@@ -56,8 +57,11 @@
   <div>
   	<form action='getStyleUrl' method='GET'>
 		<button type='submit'>Generate Style Image</button>
-	</form>
+		<input id='contentImageName' type="text" name="contentImage" value="Mickey">
+		 <input id='styleImageName' type="text" name="styleImage" value="Mouse">
+	 </form>
   </div>
+ 
   
   
 

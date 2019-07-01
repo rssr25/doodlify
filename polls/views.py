@@ -9,4 +9,5 @@ def index(request):
 
 def generateStyle(request):
 	
+	print(request)
 	return HttpResponse('Generating Style')

@@ -1,7 +1,10 @@
+
+var contentImageName = ""
 function readURL(input) {
   if (input.files && input.files[0]) {
 
     var reader = new FileReader();
+    contentImageName = input.files[0].name
 
     reader.onload = function(e) {
       $('.image-upload-wrap').hide();
@@ -35,6 +38,8 @@ function imageOnClick(event)
 		if(event.currentTarget.id == images[i])
 		{
 			document.getElementById(images[i]).className = 'imageClicked'
+			document.getElementById('contentImageName').value = contentImageName
+			document.getElementById('styleImageName').value = images[i]
 		}
 		else
 		{
