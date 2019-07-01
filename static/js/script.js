@@ -13,6 +13,7 @@ function readURL(input) {
       $('.file-upload-content').show();
 
       $('.image-title').html(input.files[0].name);
+      document.getElementById('contentImageName').value = contentImageName;
     };
 
     reader.readAsDataURL(input.files[0]);
@@ -37,9 +38,17 @@ function imageOnClick(event)
 	{
 		if(event.currentTarget.id == images[i])
 		{
-			document.getElementById(images[i]).className = 'imageClicked'
-			document.getElementById('contentImageName').value = contentImageName
-			document.getElementById('styleImageName').value = images[i]
+			if(images[i] == "image1")
+			{
+				document.getElementById(images[i]).className = 'imageClicked'
+				document.getElementById('styleImageName').value = images[i] + '.jpg'
+			}
+			else
+			{
+				document.getElementById(images[i]).className = 'imageClicked'
+				document.getElementById('styleImageName').value = images[i] + '.png'
+			}
+			
 		}
 		else
 		{
