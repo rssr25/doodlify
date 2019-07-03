@@ -53,15 +53,27 @@
       </div>
 
     </div> 
-  </div>
-  <div>
-  	<form action='getStyleUrl' method='GET'>
-		<button type='submit'>Generate Style Image</button>
+
+    <div>
+    	<br><br><br>
+  	<form action='getStyleUrl' method='GET' align = "center">
+  		<label>Your Image:</label>
 		<input id='contentImageName' type="text" name="contentImage" value="Content Image">
-		 <input id='styleImageName' type="text" name="styleImage" value="Style Image">
+		<label>Style Image:</label>
+		 <input id='styleImageName' type="text" name="styleImage" value="Style Image"> <br><br><br>
+     <div>
+        <div class= "loader" id="loaderAnimation"></div>
+        
+     </div>
+     <br><br>
+		 <button type='submit' class="generateButton" onclick="buttonOnclick()">DOODLIFY</button>
 	 </form>
+   
 
   </div>
+  
+</div>
+  
  
   
   

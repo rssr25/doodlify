@@ -31,8 +31,8 @@ function removeUpload() {
 
 function imageOnClick(event)
 {
+	
 	console.log(event.currentTarget.id);
-
 	var images = ['image1', 'image2', 'image3']
 	for(i = 0; i < images.length; i++)
 	{
@@ -55,6 +55,13 @@ function imageOnClick(event)
 			document.getElementById(images[i]).className = 'image'
 		}
 	}
+
+}
+
+function buttonOnclick()
+{
+	console.log("button clicked")
+	document.getElementById('loaderAnimation').style.opacity = "1.0";
 
 }
 
