@@ -123,5 +123,6 @@ STATICFILES_DIRS = [
 	os.path.join(BASE_DIR, "static/images/content_images"),
 	os.path.join(BASE_DIR, "static/images/style_images"),
 	os.path.join(BASE_DIR, "static/images/generated_images"),
+    os.path.join(BASE_DIR, "static/models"),
     '/var/www/static/',
 ]

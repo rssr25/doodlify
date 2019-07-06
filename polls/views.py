@@ -3,21 +3,57 @@ from django.http import HttpResponse
 from django.template import engines
 import time
 import cv2
+import os
+import struct
+import numpy as np
+import tensorflow as tf
+import scipy.io
+import errno
 
+#define all of the variables/arguments to the program
+verbose = True
+style_imgs_weights = [1.0]
+style_imgs_dir = 'static/images/style_images'
+content_img_dir = 'static/images/content_images'
+init_img_type = 'content'
+max_size = 512
+content_weight = 5e0
+style_weight = 1e4
+tv_weight = 1e-3
+temporal_weight = 2e2
+content_loss_function = 1
+content_layers = ['conv4_2']
+style_layers = ['relu1_1', 'relu2_1', 'relu3_1', 'relu4_1', 'relu5_1']
+content_layer_weights = [1.0]
+style_layer_weights = [0.2, 0.2, 0.2, 0.2, 0.2]
+original_colors = False
+color_convert_type = 'yuv'
+color_convert_time = 'after'
+noise_ratio = 1.0
+seed = 0
+model_weights = 'static/models/imagenet-vgg-verydeep-19.mat'
+pooling_type = 'avg'
+device = '/cpu:0'
+img_output_dir = 'static/images/generated_images'
+optimizer = 'lbfgs'
+learning_rate = 1e0
+max_iterations = 200
+print_iterations = 50
+img_name = "yourDoodle"
 # Create your views here.
 	
 def build_model(input_img):
-  if args.verbose: print('\nBUILDING VGG-19 NETWORK')
+  if verbose: print('\nBUILDING VGG-19 NETWORK')
   net = {}
   _, h, w, d     = input_img.shape
   
-  if args.verbose: print('loading model weights...')
-  vgg_rawnet     = scipy.io.loadmat(args.model_weights)
+  if verbose: print('loading model weights...')
+  vgg_rawnet     = scipy.io.loadmat(model_weights)
   vgg_layers     = vgg_rawnet['layers'][0]
-  if args.verbose: print('constructing layers...')
+  if verbose: print('constructing layers...')
   net['input']   = tf.Variable(np.zeros((1, h, w, d), dtype=np.float32))
 
-  if args.verbose: print('LAYER GROUP 1')
+  if verbose: print('LAYER GROUP 1')
   net['conv1_1'] = conv_layer('conv1_1', net['input'], W=get_weights(vgg_layers, 0))
   net['relu1_1'] = relu_layer('relu1_1', net['conv1_1'], b=get_bias(vgg_layers, 0))
 
@@ -26,7 +62,7 @@ def build_model(input_img):
   
   net['pool1']   = pool_layer('pool1', net['relu1_2'])
 
-  if args.verbose: print('LAYER GROUP 2')  
+  if verbose: print('LAYER GROUP 2')  
   net['conv2_1'] = conv_layer('conv2_1', net['pool1'], W=get_weights(vgg_layers, 5))
   net['relu2_1'] = relu_layer('relu2_1', net['conv2_1'], b=get_bias(vgg_layers, 5))
   
@@ -35,7 +71,7 @@ def build_model(input_img):
   
   net['pool2']   = pool_layer('pool2', net['relu2_2'])
   
-  if args.verbose: print('LAYER GROUP 3')
+  if verbose: print('LAYER GROUP 3')
   net['conv3_1'] = conv_layer('conv3_1', net['pool2'], W=get_weights(vgg_layers, 10))
   net['relu3_1'] = relu_layer('relu3_1', net['conv3_1'], b=get_bias(vgg_layers, 10))
 
@@ -50,7 +86,7 @@ def build_model(input_img):
 
   net['pool3']   = pool_layer('pool3', net['relu3_4'])
 
-  if args.verbose: print('LAYER GROUP 4')
+  if verbose: print('LAYER GROUP 4')
   net['conv4_1'] = conv_layer('conv4_1', net['pool3'], W=get_weights(vgg_layers, 19))
   net['relu4_1'] = relu_layer('relu4_1', net['conv4_1'], b=get_bias(vgg_layers, 19))
 
@@ -65,7 +101,7 @@ def build_model(input_img):
 
   net['pool4']   = pool_layer('pool4', net['relu4_4'])
 
-  if args.verbose: print('LAYER GROUP 5')
+  if verbose: print('LAYER GROUP 5')
   net['conv5_1'] = conv_layer('conv5_1', net['pool4'], W=get_weights(vgg_layers, 28))
   net['relu5_1'] = relu_layer('relu5_1', net['conv5_1'], b=get_bias(vgg_layers, 28))
 
@@ -84,25 +120,25 @@ def build_model(input_img):
 
 def conv_layer(layer_name, layer_input, W):
   conv = tf.nn.conv2d(layer_input, W, strides=[1, 1, 1, 1], padding='SAME')
-  if args.verbose: print('--{} | shape={} | weights_shape={}'.format(layer_name, 
+  if verbose: print('--{} | shape={} | weights_shape={}'.format(layer_name, 
     conv.get_shape(), W.get_shape()))
   return conv
 
 def relu_layer(layer_name, layer_input, b):
   relu = tf.nn.relu(layer_input + b)
-  if args.verbose: 
+  if verbose: 
     print('--{} | shape={} | bias_shape={}'.format(layer_name, relu.get_shape(), 
       b.get_shape()))
   return relu
 
 def pool_layer(layer_name, layer_input):
-  if args.pooling_type == 'avg':
+  if pooling_type == 'avg':
     pool = tf.nn.avg_pool(layer_input, ksize=[1, 2, 2, 1], 
       strides=[1, 2, 2, 1], padding='SAME')
-  elif args.pooling_type == 'max':
+  elif pooling_type == 'max':
     pool = tf.nn.max_pool(layer_input, ksize=[1, 2, 2, 1], 
       strides=[1, 2, 2, 1], padding='SAME')
-  if args.verbose: 
+  if verbose: 
     print('--{}   | shape={}'.format(layer_name, pool.get_shape()))
   return pool
 
@@ -123,11 +159,11 @@ def content_layer_loss(p, x):
   _, h, w, d = p.get_shape()
   M = h.value * w.value
   N = d.value
-  if args.content_loss_function   == 1:
+  if content_loss_function   == 1:
     K = 1. / (2. * N**0.5 * M**0.5)
-  elif args.content_loss_function == 2:
+  elif content_loss_function == 2:
     K = 1. / (N * M)
-  elif args.content_loss_function == 3:  
+  elif content_loss_function == 3:  
     K = 1. / 2.
   loss = K * tf.reduce_sum(tf.pow((x - p), 2))
   return loss
@@ -160,36 +196,18 @@ def mask_style_layer(a, x, mask_img):
   x = tf.multiply(x, mask)
   return a, x
 
-def sum_masked_style_losses(sess, net, style_imgs):
-  total_style_loss = 0.
-  weights = args.style_imgs_weights
-  masks = args.style_mask_imgs
-  for img, img_weight, img_mask in zip(style_imgs, weights, masks):
-    sess.run(net['input'].assign(img))
-    style_loss = 0.
-    for layer, weight in zip(args.style_layers, args.style_layer_weights):
-      a = sess.run(net[layer])
-      x = net[layer]
-      a = tf.convert_to_tensor(a)
-      a, x = mask_style_layer(a, x, img_mask)
-      style_loss += style_layer_loss(a, x) * weight
-    style_loss /= float(len(args.style_layers))
-    total_style_loss += (style_loss * img_weight)
-  total_style_loss /= float(len(style_imgs))
-  return total_style_loss
-
 def sum_style_losses(sess, net, style_imgs):
   total_style_loss = 0.
-  weights = args.style_imgs_weights
+  weights = style_imgs_weights
   for img, img_weight in zip(style_imgs, weights):
     sess.run(net['input'].assign(img))
     style_loss = 0.
-    for layer, weight in zip(args.style_layers, args.style_layer_weights):
+    for layer, weight in zip(style_layers, style_layer_weights):
       a = sess.run(net[layer])
       x = net[layer]
       a = tf.convert_to_tensor(a)
       style_loss += style_layer_loss(a, x) * weight
-    style_loss /= float(len(args.style_layers))
+    style_loss /= float(len(style_layers))
     total_style_loss += (style_loss * img_weight)
   total_style_loss /= float(len(style_imgs))
   return total_style_loss
@@ -197,12 +215,12 @@ def sum_style_losses(sess, net, style_imgs):
 def sum_content_losses(sess, net, content_img):
   sess.run(net['input'].assign(content_img))
   content_loss = 0.
-  for layer, weight in zip(args.content_layers, args.content_layer_weights):
+  for layer, weight in zip(content_layers, content_layer_weights):
     p = sess.run(net[layer])
     x = net[layer]
     p = tf.convert_to_tensor(p)
     content_loss += content_layer_loss(p, x) * weight
-  content_loss /= float(len(args.content_layers))
+  content_loss /= float(len(content_layers))
   return content_loss
 
 def read_image(path):
@@ -282,15 +300,12 @@ def check_image(img, path):
   rendering -- where the magic happens
 '''
 def stylize(content_img, style_imgs, init_img, frame=None):
-  with tf.device(args.device), tf.Session() as sess:
+  with tf.device(device), tf.Session() as sess:
     # setup network
     net = build_model(content_img)
     
     # style loss
-    if args.style_mask:
-      L_style = sum_masked_style_losses(sess, net, style_imgs)
-    else:
-      L_style = sum_style_losses(sess, net, style_imgs)
+    L_style = sum_style_losses(sess, net, style_imgs)
     
     # content loss
     L_content = sum_content_losses(sess, net, content_img)
@@ -299,115 +314,100 @@ def stylize(content_img, style_imgs, init_img, frame=None):
     L_tv = tf.image.total_variation(net['input'])
     
     # loss weights
-    alpha = args.content_weight
-    beta  = args.style_weight
-    theta = args.tv_weight
+    alpha = content_weight
+    beta  = style_weight
+    theta = tv_weight
     
     # total loss
     L_total  = alpha * L_content
     L_total += beta  * L_style
     L_total += theta * L_tv
-    
-    # video temporal loss
-    if args.video and frame > 1:
-      gamma      = args.temporal_weight
-      L_temporal = sum_shortterm_temporal_losses(sess, net, frame, init_img)
-      L_total   += gamma * L_temporal
 
     # optimization algorithm
     optimizer = get_optimizer(L_total)
 
-    if args.optimizer == 'adam':
-      minimize_with_adam(sess, net, optimizer, init_img, L_total)
-    elif args.optimizer == 'lbfgs':
-      minimize_with_lbfgs(sess, net, optimizer, init_img)
+    minimize_with_lbfgs(sess, net, optimizer, init_img)
     
     output_img = sess.run(net['input'])
     
-    if args.original_colors:
-      output_img = convert_to_original_colors(np.copy(content_img), output_img)
+    #if original_colors:
+     # output_img = convert_to_original_colors(np.copy(content_img), output_img)
 
-    if args.video:
-      write_video_output(frame, output_img)
-    else:
-      write_image_output(output_img, content_img, style_imgs, init_img)
+    write_image_output(output_img, content_img, style_imgs, init_img)
 
 def minimize_with_lbfgs(sess, net, optimizer, init_img):
-  if args.verbose: print('\nMINIMIZING LOSS USING: L-BFGS OPTIMIZER')
+  if verbose: print('\nMINIMIZING LOSS USING: L-BFGS OPTIMIZER')
   init_op = tf.global_variables_initializer()
   sess.run(init_op)
   sess.run(net['input'].assign(init_img))
   optimizer.minimize(sess)
 
 def minimize_with_adam(sess, net, optimizer, init_img, loss):
-  if args.verbose: print('\nMINIMIZING LOSS USING: ADAM OPTIMIZER')
+  if verbose: print('\nMINIMIZING LOSS USING: ADAM OPTIMIZER')
   train_op = optimizer.minimize(loss)
   init_op = tf.global_variables_initializer()
   sess.run(init_op)
   sess.run(net['input'].assign(init_img))
   iterations = 0
-  while (iterations < args.max_iterations):
+  while (iterations < max_iterations):
     sess.run(train_op)
-    if iterations % args.print_iterations == 0 and args.verbose:
+    if iterations % print_iterations == 0 and verbose:
       curr_loss = loss.eval()
       print("At iterate {}\tf=  {}".format(iterations, curr_loss))
     iterations += 1
 
 def get_optimizer(loss):
-  print_iterations = args.print_iterations if args.verbose else 0
-  if args.optimizer == 'lbfgs':
-    optimizer = tf.contrib.opt.ScipyOptimizerInterface(
-      loss, method='L-BFGS-B',
-      options={'maxiter': args.max_iterations,
-                  'disp': print_iterations})
-  elif args.optimizer == 'adam':
-    optimizer = tf.train.AdamOptimizer(args.learning_rate)
+  print_iters = print_iterations if verbose else 0
+  optimizer = tf.contrib.opt.ScipyOptimizerInterface(
+    loss, method='L-BFGS-B',
+    options={'maxiter': max_iterations,
+                'disp': print_iters})
   return optimizer
 
 def write_video_output(frame, output_img):
-  fn = args.content_frame_frmt.format(str(frame).zfill(4))
-  path = os.path.join(args.video_output_dir, fn)
+  fn = content_frame_frmt.format(str(frame).zfill(4))
+  path = os.path.join(video_output_dir, fn)
   write_image(path, output_img)
 
 def write_image_output(output_img, content_img, style_imgs, init_img):
-  out_dir = os.path.join(args.img_output_dir, args.img_name)
-  maybe_make_directory(out_dir)
-  img_path = os.path.join(out_dir, args.img_name+'.png')
-  content_path = os.path.join(out_dir, 'content.png')
-  init_path = os.path.join(out_dir, 'init.png')
+  #out_dir = os.path.join(img_output_dir, img_name)
+  #maybe_make_directory(out_dir)
+  img_path = os.path.join(img_output_dir, img_name+'.png')
+  #content_path = os.path.join(out_dir, 'content.png')
+  #init_path = os.path.join(out_dir, 'init.png')
 
   write_image(img_path, output_img)
-  write_image(content_path, content_img)
-  write_image(init_path, init_img)
+  #write_image(content_path, content_img)
+  #write_image(init_path, init_img)
   index = 0
-  for style_img in style_imgs:
-    path = os.path.join(out_dir, 'style_'+str(index)+'.png')
-    write_image(path, style_img)
-    index += 1
+  #for style_img in style_imgs:
+    #path = os.path.join(out_dir, 'style_'+str(index)+'.png')
+    #write_image(path, style_img)
+    #index += 1
   
   # save the configuration settings
-  out_file = os.path.join(out_dir, 'meta_data.txt')
+  out_file = os.path.join(img_output_dir, 'meta_data.txt')
   f = open(out_file, 'w')
-  f.write('image_name: {}\n'.format(args.img_name))
-  f.write('content: {}\n'.format(args.content_img))
+  f.write('image_name: {}\n'.format(img_name))
+  f.write('content: {}\n'.format(content_img))
   index = 0
-  for style_img, weight in zip(args.style_imgs, args.style_imgs_weights):
+  for style_img, weight in zip(style_imgs, style_imgs_weights):
     f.write('styles['+str(index)+']: {} * {}\n'.format(weight, style_img))
     index += 1
   index = 0
-  if args.style_mask_imgs is not None:
-    for mask in args.style_mask_imgs:
-      f.write('style_masks['+str(index)+']: {}\n'.format(mask))
-      index += 1
-  f.write('init_type: {}\n'.format(args.init_img_type))
-  f.write('content_weight: {}\n'.format(args.content_weight))
-  f.write('style_weight: {}\n'.format(args.style_weight))
-  f.write('tv_weight: {}\n'.format(args.tv_weight))
-  f.write('content_layers: {}\n'.format(args.content_layers))
-  f.write('style_layers: {}\n'.format(args.style_layers))
-  f.write('optimizer_type: {}\n'.format(args.optimizer))
-  f.write('max_iterations: {}\n'.format(args.max_iterations))
-  f.write('max_image_size: {}\n'.format(args.max_size))
+  # if style_mask_imgs is not None:
+  #   for mask in style_mask_imgs:
+  #     f.write('style_masks['+str(index)+']: {}\n'.format(mask))
+  #     index += 1
+  f.write('init_type: {}\n'.format(init_img_type))
+  f.write('content_weight: {}\n'.format(content_weight))
+  f.write('style_weight: {}\n'.format(style_weight))
+  f.write('tv_weight: {}\n'.format(tv_weight))
+  f.write('content_layers: {}\n'.format(content_layers))
+  f.write('style_layers: {}\n'.format(style_layers))
+  f.write('optimizer_type: {}\n'.format(optimizer))
+  f.write('max_iterations: {}\n'.format(max_iterations))
+  f.write('max_image_size: {}\n'.format(max_size))
   f.close()
 
 '''
@@ -420,7 +420,7 @@ def get_init_image(init_type, content_img, style_imgs, frame=None):
   elif init_type == 'style':
     return style_imgs[0]
   elif init_type == 'random':
-    init_img = get_noise_image(args.noise_ratio, content_img)
+    init_img = get_noise_image(noise_ratio, content_img)
     return init_img
   # only for video frames
   elif init_type == 'prev':
@@ -431,13 +431,13 @@ def get_init_image(init_type, content_img, style_imgs, frame=None):
     return init_img
 
 def get_content_image(content_img):
-  path = os.path.join(args.content_img_dir, content_img)
+  path = os.path.join(content_img_dir, content_img)
    # bgr image
   img = cv2.imread(path, cv2.IMREAD_COLOR)
   check_image(img, path)
   img = img.astype(np.float32)
   h, w, d = img.shape
-  mx = args.max_size
+  mx = max_size
   # resize if > max size
   if h > w and h > mx:
     w = (float(mx) / float(h)) * w
@@ -448,28 +448,28 @@ def get_content_image(content_img):
   img = preprocess(img)
   return img
 
-def get_style_images(content_img):
+def get_style_images(content_img, style_fn):
   _, ch, cw, cd = content_img.shape
   style_imgs = []
-  for style_fn in args.style_imgs:
-    path = os.path.join(args.style_imgs_dir, style_fn)
-    # bgr image
-    img = cv2.imread(path, cv2.IMREAD_COLOR)
-    check_image(img, path)
-    img = img.astype(np.float32)
-    img = cv2.resize(img, dsize=(cw, ch), interpolation=cv2.INTER_AREA)
-    img = preprocess(img)
-    style_imgs.append(img)
+  
+  path = os.path.join(style_imgs_dir, style_fn)
+  # bgr image
+  img = cv2.imread(path, cv2.IMREAD_COLOR)
+  check_image(img, path)
+  img = img.astype(np.float32)
+  img = cv2.resize(img, dsize=(cw, ch), interpolation=cv2.INTER_AREA)
+  img = preprocess(img)
+  style_imgs.append(img)
   return style_imgs
 
 def get_noise_image(noise_ratio, content_img):
-  np.random.seed(args.seed)
+  np.random.seed(seed)
   noise_img = np.random.uniform(-20., 20., content_img.shape).astype(np.float32)
   img = noise_ratio * noise_img + (1.-noise_ratio) * content_img
   return img
 
 def get_mask_image(mask_img, width, height):
-  path = os.path.join(args.content_img_dir, mask_img)
+  path = os.path.join(content_img_dir, mask_img)
   img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
   check_image(img, path)
   img = cv2.resize(img, dsize=(width, height), interpolation=cv2.INTER_AREA)
@@ -491,36 +491,36 @@ def warp_image(src, flow):
     interpolation=cv2.INTER_CUBIC, borderMode=cv2.BORDER_TRANSPARENT)
   return dst
 
-def convert_to_original_colors(content_img, stylized_img):
-  content_img  = postprocess(content_img)
-  stylized_img = postprocess(stylized_img)
-  if args.color_convert_type == 'yuv':
-    cvt_type = cv2.COLOR_BGR2YUV
-    inv_cvt_type = cv2.COLOR_YUV2BGR
-  elif args.color_convert_type == 'ycrcb':
-    cvt_type = cv2.COLOR_BGR2YCR_CB
-    inv_cvt_type = cv2.COLOR_YCR_CB2BGR
-  elif args.color_convert_type == 'luv':
-    cvt_type = cv2.COLOR_BGR2LUV
-    inv_cvt_type = cv2.COLOR_LUV2BGR
-  elif args.color_convert_type == 'lab':
-    cvt_type = cv2.COLOR_BGR2LAB
-    inv_cvt_type = cv2.COLOR_LAB2BGR
-  content_cvt = cv2.cvtColor(content_img, cvt_type)
-  stylized_cvt = cv2.cvtColor(stylized_img, cvt_type)
-  c1, _, _ = cv2.split(stylized_cvt)
-  _, c2, c3 = cv2.split(content_cvt)
-  merged = cv2.merge((c1, c2, c3))
-  dst = cv2.cvtColor(merged, inv_cvt_type).astype(np.float32)
-  dst = preprocess(dst)
-  return dst
+# def convert_to_original_colors(content_img, stylized_img):
+#   content_img  = postprocess(content_img)
+#   stylized_img = postprocess(stylized_img)
+#   if color_convert_type == 'yuv':
+#     cvt_type = cv2.COLOR_BGR2YUV
+#     inv_cvt_type = cv2.COLOR_YUV2BGR
+#   elif color_convert_type == 'ycrcb':
+#     cvt_type = cv2.COLOR_BGR2YCR_CB
+#     inv_cvt_type = cv2.COLOR_YCR_CB2BGR
+#   elif color_convert_type == 'luv':
+#     cvt_type = cv2.COLOR_BGR2LUV
+#     inv_cvt_type = cv2.COLOR_LUV2BGR
+#   elif color_convert_type == 'lab':
+#     cvt_type = cv2.COLOR_BGR2LAB
+#     inv_cvt_type = cv2.COLOR_LAB2BGR
+#   content_cvt = cv2.cvtColor(content_img, cvt_type)
+#   stylized_cvt = cv2.cvtColor(stylized_img, cvt_type)
+#   c1, _, _ = cv2.split(stylized_cvt)
+#   _, c2, c3 = cv2.split(content_cvt)
+#   merged = cv2.merge((c1, c2, c3))
+#   dst = cv2.cvtColor(merged, inv_cvt_type).astype(np.float32)
+#   dst = preprocess(dst)
+#   return dst
 
 def render_single_image():
-  content_img = get_content_image(args.content_img)
-  style_imgs = get_style_images(content_img)
+  content_im = get_content_image(content_img)
+  style_imgs = get_style_images(content_im)
   with tf.Graph().as_default():
     print('\n---- RENDERING SINGLE IMAGE ----\n')
-    init_img = get_init_image(args.init_img_type, content_img, style_imgs)
+    init_img = get_init_image(init_img_type, content_img, style_imgs)
     tick = time.time()
     stylize(content_img, style_imgs, init_img)
     tock = time.time()
@@ -539,38 +539,38 @@ def warp_image(src, flow):
     interpolation=cv2.INTER_CUBIC, borderMode=cv2.BORDER_TRANSPARENT)
   return dst
 
-def convert_to_original_colors(content_img, stylized_img):
-  content_img  = postprocess(content_img)
-  stylized_img = postprocess(stylized_img)
-  if args.color_convert_type == 'yuv':
-    cvt_type = cv2.COLOR_BGR2YUV
-    inv_cvt_type = cv2.COLOR_YUV2BGR
-  elif args.color_convert_type == 'ycrcb':
-    cvt_type = cv2.COLOR_BGR2YCR_CB
-    inv_cvt_type = cv2.COLOR_YCR_CB2BGR
-  elif args.color_convert_type == 'luv':
-    cvt_type = cv2.COLOR_BGR2LUV
-    inv_cvt_type = cv2.COLOR_LUV2BGR
-  elif args.color_convert_type == 'lab':
-    cvt_type = cv2.COLOR_BGR2LAB
-    inv_cvt_type = cv2.COLOR_LAB2BGR
-  content_cvt = cv2.cvtColor(content_img, cvt_type)
-  stylized_cvt = cv2.cvtColor(stylized_img, cvt_type)
-  c1, _, _ = cv2.split(stylized_cvt)
-  _, c2, c3 = cv2.split(content_cvt)
-  merged = cv2.merge((c1, c2, c3))
-  dst = cv2.cvtColor(merged, inv_cvt_type).astype(np.float32)
-  dst = preprocess(dst)
-  return dst
+# def convert_to_original_colors(content_img, stylized_img):
+#   content_img  = postprocess(content_img)
+#   stylized_img = postprocess(stylized_img)
+#   if color_convert_type == 'yuv':
+#     cvt_type = cv2.COLOR_BGR2YUV
+#     inv_cvt_type = cv2.COLOR_YUV2BGR
+#   elif color_convert_type == 'ycrcb':
+#     cvt_type = cv2.COLOR_BGR2YCR_CB
+#     inv_cvt_type = cv2.COLOR_YCR_CB2BGR
+#   elif color_convert_type == 'luv':
+#     cvt_type = cv2.COLOR_BGR2LUV
+#     inv_cvt_type = cv2.COLOR_LUV2BGR
+#   elif color_convert_type == 'lab':
+#     cvt_type = cv2.COLOR_BGR2LAB
+#     inv_cvt_type = cv2.COLOR_LAB2BGR
+#   content_cvt = cv2.cvtColor(content_img, cvt_type)
+#   stylized_cvt = cv2.cvtColor(stylized_img, cvt_type)
+#   c1, _, _ = cv2.split(stylized_cvt)
+#   _, c2, c3 = cv2.split(content_cvt)
+#   merged = cv2.merge((c1, c2, c3))
+#   dst = cv2.cvtColor(merged, inv_cvt_type).astype(np.float32)
+#   dst = preprocess(dst)
+#   return dst
 
-def render_single_image():
-  content_img = get_content_image(args.content_img)
-  style_imgs = get_style_images(content_img)
+def render_single_image(content, style):
+  content_im = get_content_image(content)
+  style_imgs = get_style_images(content_im, style)
   with tf.Graph().as_default():
     print('\n---- RENDERING SINGLE IMAGE ----\n')
-    init_img = get_init_image(args.init_img_type, content_img, style_imgs)
+    init_img = get_init_image(init_img_type, content_im, style_imgs)
     tick = time.time()
-    stylize(content_img, style_imgs, init_img)
+    stylize(content_im, style_imgs, init_img)
     tock = time.time()
     print('Single image elapsed time: {}'.format(tock - tick))
 
@@ -582,21 +582,20 @@ def generateStyle(request):
 	
 	contentImageFromPage = request.GET.get('contentImage')
 	styleImageFromPage = request.GET.get('styleImage')
-	contentImageLocation = "static/images/content_images/" + contentImageFromPage
-	styleImageLocation = "static/images/style_images/" + styleImageFromPage
+	#contentImageLocation = "static/images/content_images/" + contentImageFromPage
+	#styleImageLocation = "static/images/style_images/" + styleImageFromPage
+  #img_name = str(contentImageFromPage) + '_styled.png'
 
-	contentImage = cv2.imread(contentImageLocation)
-	styleImage = cv2.imread(styleImageLocation)
+	#contentImage = cv2.imread(contentImageLocation)
+	#styleImage = cv2.imread(styleImageLocation)
 
-	contentImageGrayScale = cv2.cvtColor(contentImage, cv2.COLOR_BGR2GRAY)
-	saveImageLocation = "static/images/generated_images/" + contentImageFromPage + "_gray.jpg"
+	#contentImageGrayScale = cv2.cvtColor(contentImage, cv2.COLOR_BGR2GRAY)
+	saveImageLocation = "static/images/generated_images/yourDoodle.png"
 
-	cv2.imwrite(saveImageLocation, contentImageGrayScale)
+	render_single_image(contentImageFromPage, styleImageFromPage)
 
 	template_code = """<!doctype html><head><title>Your art image</title></head><body><img src = {{ saveImageLocation }}/> </body></html>"""
 
 	template = engines['django'].from_string(template_code)
-
-	time.sleep(5)
 
 	return HttpResponse(template.render(context={'saveImageLocation': saveImageLocation}))
