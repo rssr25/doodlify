@@ -15,23 +15,28 @@
 <body>
 
   <script class="jsbin" src="https://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
-  
+ <form method = "POST" action='uploadFile' enctype="multipart/form-data">
+ 	{% csrf_token %}
 <div class="file-upload">
 
   <button class="file-upload-btn" type="button" onclick="$('.file-upload-input').trigger( 'click' )">Add Image</button>
 
   <div class="image-upload-wrap">
-    <input class="file-upload-input" type='file' onchange="readURL(this);" accept="image/*" />
+    <input class="file-upload-input" type='file' onchange="readURL(this);" accept="image/*" name='userImage'/>
     <div class="drag-text">
       <h3>1. Drag and drop a file or select add Image</h3>
     </div>
+
   </div>
   <div class="file-upload-content">
     <img class="file-upload-image" src="#" alt="your image" name = "contentImage" />
     <div class="image-title-wrap">
       <button type="button" onclick="removeUpload()" class="remove-image">Remove <span class="image-title">Uploaded Image</span></button>
+      <button type="submit" class="generateButton">Upload Image</button>
     </div>
+
   </div>
+  </form>
 
   
 </div>
@@ -56,7 +61,8 @@
 
     <div>
     	<br><br><br>
-  	<form action='getStyleUrl' method='GET' align = "center">
+  	<form action='getStyleUrl' method='POST' align = "center">
+  		{% csrf_token%}
   		<label>Your Image:</label>
 		<input id='contentImageName' type="text" name="contentImage" value="Content Image">
 		<label>Style Image:</label>

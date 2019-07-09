@@ -1,6 +1,8 @@
 from django.shortcuts import render
 from django.http import HttpResponse
+from django.http import HttpResponseRedirect
 from django.template import engines
+from django.core.files.storage import FileSystemStorage
 import time
 import cv2
 import os
@@ -14,7 +16,7 @@ import errno
 verbose = True
 style_imgs_weights = [1.0]
 style_imgs_dir = 'static/images/style_images'
-content_img_dir = 'static/images/content_images'
+content_img_dir = 'media/images/content_images'
 init_img_type = 'content'
 max_size = 512
 content_weight = 5e0
@@ -579,9 +581,8 @@ def index(request):
 	return render(request, "home/index.html")
 
 def generateStyle(request):
-	
-	contentImageFromPage = request.GET.get('contentImage')
-	styleImageFromPage = request.GET.get('styleImage')
+	contentImageFromPage = request.POST.get('contentImage')
+	styleImageFromPage = request.POST.get('styleImage')
 	#contentImageLocation = "static/images/content_images/" + contentImageFromPage
 	#styleImageLocation = "static/images/style_images/" + styleImageFromPage
   #img_name = str(contentImageFromPage) + '_styled.png'
@@ -599,3 +600,15 @@ def generateStyle(request):
 	template = engines['django'].from_string(template_code)
 
 	return HttpResponse(template.render(context={'saveImageLocation': saveImageLocation}))
+
+def uploadFile(request):
+
+  print("HELLO!")
+  
+  uploaded_file = request.FILES['userImage']
+  fs = FileSystemStorage()
+  fs.save(uploaded_file.name, uploaded_file)
+
+  #return HttpResponse("Hello")
+
+  return HttpResponseRedirect(request.META.get('HTTP_REFERER'))

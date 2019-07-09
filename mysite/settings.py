@@ -127,5 +127,8 @@ STATICFILES_DIRS = [
     '/var/www/static/',
 ]
 
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media/images/content_images')
+MEDIA_URL = '/media/'
+
 #  Add configuration for static files storage using whitenoise
 #STATICFILES_STORAGE = 'whitenoise.django.GzipManifestStaticFilesStorage'
