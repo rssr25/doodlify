@@ -25,7 +25,7 @@ SECRET_KEY = '%3pb)9-tzrybgd4lpomzy%8_gs5os75k2ofagb43ho)d_*r7ex'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['doodlify.herokuapp.com']
+ALLOWED_HOSTS = ['doodlify.herokuapp.com', 'localhost']
 
 
 # Application definition
