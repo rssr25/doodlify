@@ -15,7 +15,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 import polls
+
 
 urlpatterns = [
     path('', include('polls.urls')),
@@ -23,3 +25,5 @@ urlpatterns = [
     path('getStyleUrl', polls.views.generateStyle),
 
 ]
+
+urlpatterns += staticfiles_urlpatterns()
